@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<script>
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+var dtmf = {
+  play: false,
+  ready: false,
+  keys: null,
+  audio: null,
+  tone0: null,
+  tone1: null,
+  time_on: -1,
+  time_off: -1,
+  space: 25,
+  duration: 75,
+  durationChars: [' ', ',', ';', ':', '.'],
+
+  init: function () {
+    dtmf.audio = new window.AudioContext();
+    dtmf.ready = true;
+  },
+
+  freqs: function (key) {
+    let freqs = dtmf.keys[key];
+    if (freqs !== undefined) {
+      return freqs;
+    }
+    return null;
+  },
+
+  start: function (event = null, replay = null) {
+    if (!dtmf.ready) {
+      dtmf.init();
+    }
+    if (dtmf.play) {
+      return false;
+    }
+    let key = -1;
+    if (replay !== null) {
+      key = replay;
+    } else if (event instanceof MouseEvent) {
+      key = this.innerText.trim();
+    } else {
+      key = event.key;
+    }
+    key = key.toUpperCase();
+    let tones = dtmf.freqs(key);
+    if (tones === null) {
+      return false;
+    }
+    dtmf.play = true;
+    dtmf.tone0 = dtmf.audio.createOscillator();
+    dtmf.tone0.type = "sine";
+    dtmf.tone0.frequency.setValueAtTime(tones[0], dtmf.audio.currentTime);
+    dtmf.tone0.connect(dtmf.audio.destination);
+    dtmf.tone0.start();
+    dtmf.tone1 = dtmf.audio.createOscillator();
+    dtmf.tone1.type = "sine";
+    dtmf.tone1.frequency.setValueAtTime(tones[1], dtmf.audio.currentTime);
+    dtmf.tone1.connect(dtmf.audio.destination);
+    dtmf.tone1.start();
+    dtmf.time_on = new Date().getTime();
+    return true;
+  },
+
+  stop: function () {
+    dtmf.time_off = new Date().getTime();
+    let ms = dtmf.time_off - dtmf.time_on;
+    if (ms < dtmf.duration) {
+      setTimeout(dtmf.stop, dtmf.duration + 1 - ms);
+      return;
+    }
+    if (dtmf.tone0 !== null) {
+      dtmf.tone0.stop();
+      dtmf.tone0 = null;
+    }
+    if (dtmf.tone1 !== null) {
+      dtmf.tone1.stop();
+      dtmf.tone1 = null;
+    }
+    dtmf.play = false;
+  },
+
+  load: function () {
+    let k = new Array(16);
+    let f = [1209, 1336, 1477, 1633, 697, 770, 852, 941];
+    k["1"] = [f[0], f[4]];
+    k["2"] = [f[1], f[4]];
+    k["3"] = [f[2], f[4]];
+    k["A"] = [f[3], f[4]];
+    k["4"] = [f[0], f[5]];
+    k["5"] = [f[1], f[5]];
+    k["6"] = [f[2], f[5]];
+    k["B"] = [f[3], f[5]];
+    k["7"] = [f[0], f[6]];
+    k["8"] = [f[1], f[6]];
+    k["9"] = [f[2], f[6]];
+    k["C"] = [f[3], f[6]];
+    k["*"] = [f[0], f[7]];
+    k["0"] = [f[1], f[7]];
+    k["#"] = [f[2], f[7]];
+    k["D"] = [f[3], f[7]];
+    dtmf.keys = k;
+    buttons = document.querySelectorAll("#dtmf_keyboard button");
+    buttons.forEach(function (button, index) {
+      button.addEventListener("mousedown", dtmf.start);
+      button.addEventListener("mouseup", dtmf.stop);
+      button.addEventListener("mouseleave", dtmf.stop);
+    });
+  },
+
+  playTone: function(freq) {
+    let tone = dtmf.audio.createOscillator();
+    tone.type = "sine";
+    tone.frequency.setValueAtTime(freq, dtmf.audio.currentTime);
+    tone.connect(dtmf.audio.destination);
+    tone.start();
+    return tone;
+  },
+  
+  playDTMF: async function(key, durationMs) {
+    const tones = dtmf.freqs(key).map(dtmf.playTone);
+
+    await sleep(durationMs);
+
+    tones.forEach(tone => tone.stop());
+  },
+
+  playDtmfTune: function(tune, bpm = 60) {
+    if (dtmf.play) {
+      return;
+    }
+          
+    dtmf.play = true;
+
+    dtmf.playDtmfTuneAsync(tune, bpm);
+  
+    dtmf.play = false;
+   },
+
+  playDtmfTuneAsync: async function(tune, bpm = 60) {
+    const wholeNoteMs = Math.floor(60000 / bpm);
+
+    const durations = Object.fromEntries(dtmf.durationChars.map((c, index) => [c, wholeNoteMs >> index]));
+    
+    for (let i = 0; i < tune.length / 2; i++) {
+        const key = tune[2 * i];
+        const durationMs = durations[tune[2 * i + 1]];
+
+        if (key !== ' ') {
+          const tones = dtmf.freqs(key).map(dtmf.playTone);
+
+          await sleep(durationMs);
+
+          tones.forEach(tone => tone.stop());
+        }
+        else {
+          await sleep(durationMs);          
+        }
+    }
+  }
+
+};
+
+document.addEventListener("DOMContentLoaded", dtmf.load);
+
+document.addEventListener('keydown', dtmf.start, false);
+document.addEventListener('keyup', dtmf.stop, false);
+    
+</script>
+
+    <head></head>
+
+    <body>
+      <header></header>
+      <main>
+         <article id="content">            
+            <style>
+                body {
+                  font-family: 'Lato', sans-serif;
+                  font-weight: 300;
+                }
+                #phone {
+                  background-size: contain;
+                  height:655px;
+                }
+                #wrapper {
+                  width:252px;
+                  height:410px;
+                  margin:0 auto 0 auto;
+                  position:relative;
+                  top:116px;
+                  padding:24px 0 0 0;
+                  background:#fff;
+                }
+                #dtmf_keyboard button {
+                    border-radius: 50px 50px 50px 50px;
+                    color:#444;
+                    width:70px;
+                    height:70px;
+                    text-align:center;
+                    font-size:30px;
+                    float:left;
+                    box-sizing:border-box;
+                    padding:5px 0 0 0;
+                    margin:0 7px 10px 7px;
+                    border:1px solid #444;
+                    cursor:pointer;
+                    background:#fff;
+                }
+                #dtmf_keyboard span{
+                    display:block;
+                    color:#444;
+                    text-align:center;
+                    font-size:12px;
+                    text-transform:uppercase;
+                }
+                #dtmf_call button {
+                  background:#5CDB74;
+                  border:none;
+                  color:#FFF;
+                  line-height:60px;
+                  font-size:40px;
+                }
+            </style>
+            
+            <div id="phone">
+            <div id="wrapper">
+                <h1>Matthew's Dialer 2.0</h1>
+
+                <input type="text" placeholder="0" style="border: 0px none; outline:none; font-size:30px;">
+                
+               <div id="dtmf_keyboard" class="plate" style="margin: 0.5em 0;">
+                  <div>
+                     <button>1</button>
+                     <button>2</button>
+                     <button>3</button>
+                     <!-- <button>A</button> -->
+                     <span></span>
+                  </div>
+                  <div>
+                     <button>4</button>
+                     <button>5</button>
+                     <button>6</button>
+                     <!-- <button>B</button> -->
+                     <span></span>
+                  </div>
+                  <div>
+                     <button>7</button>
+                     <button>8</button>
+                     <button>9</button>
+                     <!-- <button>C</button> -->
+                     <span></span>
+                  </div>
+                  <div>
+                     <button>*</button>
+                     <button>0</button>
+                     <button>#</button>
+                     <!-- <button>D</button> -->
+                     <span></span>
+                  </div>
+                  <div id="dtmf_call">
+                     <button onclick="dtmf.playDtmfTune('3;2;1;2;3;3;3,2;2;2,3;9;9; ;3;2;1;2;3;3;3, :3;2;2;3;2;1,', 50)">🐰</button>
+                     <button onclick="dtmf.playDtmfTune('6,6,6,8;5;6,8;5;6 3,3,3,2,5;6,8;5;6,8;5;6;', 60)">🎸</button>
+                     <button onclick="dtmf.playDtmfTune('1:1;1:1;2:3,3,3:2;1:2;3:1;3;3;6;9;9;6;3;6;9;3;1;1;2;3;3;2;1;2;3;1;1;1;1;1;1;2;3;3;3;2;1;2;3;1;', 30)">🕷️</button>
+                  </div>
+               </div>
+            </div>
+            </div>
+
+         </article>
+      </main>
+   </body>
+</html>
